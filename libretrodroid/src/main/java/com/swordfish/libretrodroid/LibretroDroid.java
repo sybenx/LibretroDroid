@@ -142,6 +142,13 @@ public class LibretroDroid {
     public static native void onKeyEvent(int port, int action, int keyCode);
     public static native void resetInputs();
 
+    public static final int NETPLAY_STATUS_NONE = 0;
+    public static final int NETPLAY_STATUS_CONNECTED = 1;
+    public static final int NETPLAY_STATUS_ENDED = 2;
+
+    public static native void startNetplay(int socketFd, boolean isHost, int localPort, int inputDelay);
+    public static native int getNetplayStatus();
+
     public static native void refreshAspectRatio();
 
     public static native Controller[][] getControllers();

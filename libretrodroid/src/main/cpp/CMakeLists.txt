@@ -58,6 +58,8 @@ add_library(libretrodroid SHARED
         environment.cpp
         input.h
         input.cpp
+        netplay.h
+        netplay.cpp
         shadermanager.h
         shadermanager.cpp
         rumble.h

@@ -28,6 +28,7 @@
 #include <mutex>
 #include <memory>
 #include <optional>
+#include <atomic>
 
 #include "log.h"
 #include "core.h"
@@ -36,6 +37,7 @@
 #include "renderers/renderer.h"
 #include "fpssync.h"
 #include "input.h"
+#include "netplay.h"
 #include "rumble.h"
 #include "shadermanager.h"
 #include "utils/javautils.h"
@@ -108,6 +110,9 @@ public:
 
     void resetInputs();
 
+    void startNetplay(int socketFd, bool isHost, unsigned int localPort, unsigned int inputDelay);
+    int getNetplayStatus() const;
+
     void onKeyEvent(unsigned int port, int action, int keyCode);
     void onMotionEvent(unsigned int port, unsigned int source, float xAxis, float yAxis);
     void onTouchEvent(float xAxis, float yAxis);
@@ -152,6 +157,11 @@ private:
     void updateAudioSampleRateMultiplier();
     float findDefaultAspectRatio(const retro_system_av_info &system_av_info);
     void afterGameLoad();
+    void runFrames();
+    void runNetplayFrames();
+    void applyNetplayState();
+    uint16_t readLocalNetplayInput();
+    std::vector<uint8_t> serializeCoreState();
 
 protected:
     static void callback_hw_video_refresh(const void *data, unsigned width, unsigned height, size_t pitch);
@@ -190,6 +200,8 @@ private:
     std::unique_ptr<FPSSync> fpsSync;
     std::unique_ptr<Input> input;
     std::unique_ptr<Rumble> rumble;
+    std::unique_ptr<Netplay> netplay;
+    std::atomic<int> netplayStatus { 0 };
 };
 
 } //namespace libretrodroid

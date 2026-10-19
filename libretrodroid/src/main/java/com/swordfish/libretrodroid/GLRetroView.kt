@@ -212,6 +212,9 @@ class GLRetroView(
         }
     }
 
+    /** One of LibretroDroid.NETPLAY_STATUS_*. Safe to call from any thread. */
+    fun getNetplayStatus(): Int = LibretroDroid.getNetplayStatus()
+
     fun reset(useEmulationThread: Boolean = true) = runOnEmulationThread(useEmulationThread) {
         LibretroDroid.reset()
     }
@@ -380,6 +383,10 @@ class GLRetroView(
             LibretroDroid.unserializeMemory(memoryId, state)
         }
         data.memoryStates = mapOf()
+        data.netplay?.let {
+            LibretroDroid.startNetplay(it.socketFd, it.isHost, it.localPort, it.inputDelay)
+        }
+        data.netplay = null
         LibretroDroid.onSurfaceCreated()
         isGameLoaded = true
 

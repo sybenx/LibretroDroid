@@ -358,6 +358,29 @@ JNIEXPORT void JNICALL Java_com_swordfish_libretrodroid_LibretroDroid_resetInput
     LibretroDroid::getInstance().resetInputs();
 }
 
+JNIEXPORT void JNICALL Java_com_swordfish_libretrodroid_LibretroDroid_startNetplay(
+    JNIEnv* env,
+    jclass obj,
+    jint socketFd,
+    jboolean isHost,
+    jint localPort,
+    jint inputDelay
+) {
+    try {
+        LibretroDroid::getInstance().startNetplay(socketFd, isHost, localPort, inputDelay);
+    } catch (std::exception &exception) {
+        LOGE("Error in startNetplay: %s", exception.what());
+        JavaUtils::throwRetroException(env, ERROR_GENERIC);
+    }
+}
+
+JNIEXPORT jint JNICALL Java_com_swordfish_libretrodroid_LibretroDroid_getNetplayStatus(
+    JNIEnv* env,
+    jclass obj
+) {
+    return LibretroDroid::getInstance().getNetplayStatus();
+}
+
 JNIEXPORT void JNICALL Java_com_swordfish_libretrodroid_LibretroDroid_reset(
     JNIEnv* env,
     jclass obj

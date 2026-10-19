@@ -47,6 +47,10 @@
 
 namespace libretrodroid {
 
+// How long a frame waits for the other device's input before the screen is drawn again without it.
+static constexpr int NETPLAY_INPUT_WAIT_MS = 20;
+static constexpr int NETPLAY_START_TIMEOUT_MS = 30000;
+
 uintptr_t LibretroDroid::callback_get_current_framebuffer() {
     return LibretroDroid::getInstance().handleGetCurrentFrameBuffer();
 }
@@ -459,6 +463,9 @@ void LibretroDroid::destroy() {
         Environment::getInstance().getHwContextDestroy()();
     }
 
+    netplay = nullptr;
+    netplayStatus = 0;
+
     core->retro_unload_game();
     core->retro_deinit();
 
@@ -494,16 +501,15 @@ void LibretroDroid::step() {
 
     LOGD("Stepping into retro_run()");
 
-    unsigned frames = 1;
-    if (fpsSync) {
-        unsigned requestedFrames = fpsSync->advanceFrames();
-
-        // If the application runs too slow it's better to just skip those frames.
-        frames = std::min(requestedFrames, 2u);
+    if (netplay) {
+        netplayStatus = (int) netplay->getStatus();
     }
 
-    for (size_t i = 0; i < frames * frameSpeed; i++)
-        core->retro_run();
+    if (netplay && netplay->isConnected()) {
+        runNetplayFrames();
+    } else {
+        runFrames();
+    }
 
     if (video && !video->rendersInVideoCallback()) {
         video->renderFrame();
@@ -534,6 +540,111 @@ void LibretroDroid::step() {
 
         video->updateRotation(Environment::getInstance().getScreenRotation());
     }
+}
+
+void LibretroDroid::runFrames() {
+    unsigned frames = 1;
+    if (fpsSync) {
+        unsigned requestedFrames = fpsSync->advanceFrames();
+
+        // If the application runs too slow it's better to just skip those frames.
+        frames = std::min(requestedFrames, 2u);
+    }
+
+    for (size_t i = 0; i < frames * frameSpeed; i++)
+        core->retro_run();
+}
+
+// Every frame waits for the other device's input, so both devices run exactly the same frames.
+// Fast forward is ignored, since the other device could never keep up.
+void LibretroDroid::runNetplayFrames() {
+    unsigned frames = 1;
+    if (fpsSync) {
+        frames = std::min(fpsSync->advanceFrames(), 2u);
+    }
+
+    for (size_t i = 0; i < frames; i++) {
+        applyNetplayState();
+
+        if (!netplay->prepareFrame(readLocalNetplayInput(), std::chrono::milliseconds(NETPLAY_INPUT_WAIT_MS))) {
+            break;
+        }
+        core->retro_run();
+        netplay->frameCompleted();
+
+        if (netplay->isChecksumFrame()) {
+            netplay->submitChecksum(Netplay::computeChecksum(serializeCoreState()));
+        }
+        if (netplay->isHost() && netplay->consumeResyncRequest()) {
+            LOGI("Netplay: sending state to resync");
+            netplay->sendState(serializeCoreState());
+        }
+    }
+}
+
+// The host sent its state after the devices drifted apart. Load it, then run again the frames this
+// device has already run since, with the same inputs.
+void LibretroDroid::applyNetplayState() {
+    auto pending = netplay->takePendingState();
+    if (!pending.has_value()) return;
+
+    if (!core->retro_unserialize(pending->data.data(), pending->data.size())) {
+        LOGE("Netplay: cannot load the host state");
+        return;
+    }
+
+    bool wasAudioEnabled = audioEnabled;
+    audioEnabled = false;
+    for (uint32_t replayFrame = pending->frame; replayFrame < netplay->getFrame(); replayFrame++) {
+        netplay->restoreFrameInputs(replayFrame);
+        core->retro_run();
+    }
+    audioEnabled = wasAudioEnabled;
+    LOGI("Netplay: resynced at frame %u", pending->frame);
+}
+
+uint16_t LibretroDroid::readLocalNetplayInput() {
+    if (!input) return 0;
+
+    uint16_t mask = 0;
+    for (unsigned id = 0; id < 16; id++) {
+        if (input->getInputState(netplay->getLocalPort(), RETRO_DEVICE_JOYPAD, 0, id)) {
+            mask |= 1 << id;
+        }
+    }
+    return mask;
+}
+
+// Called with coreLock held.
+std::vector<uint8_t> LibretroDroid::serializeCoreState() {
+    std::vector<uint8_t> state(core->retro_serialize_size());
+    core->retro_serialize(state.data(), state.size());
+    return state;
+}
+
+void LibretroDroid::startNetplay(int socketFd, bool isHost, unsigned int localPort, unsigned int inputDelay) {
+    std::lock_guard<std::mutex> lock(coreLock);
+
+    netplay = std::make_unique<Netplay>(socketFd, isHost, localPort, inputDelay);
+
+    // Both devices must start from the same state: the guest takes the host's.
+    if (isHost) {
+        netplay->sendInitialState(serializeCoreState());
+    } else {
+        auto state = netplay->receiveInitialState(std::chrono::milliseconds(NETPLAY_START_TIMEOUT_MS));
+        if (!state.has_value() || !core->retro_unserialize(state->data(), state->size())) {
+            LOGE("Netplay: no starting state from the host");
+            netplay = nullptr;
+            netplayStatus = (int) Netplay::Status::ENDED;
+            return;
+        }
+    }
+
+    netplayStatus = (int) netplay->getStatus();
+}
+
+int LibretroDroid::getNetplayStatus() const {
+    return netplayStatus;
 }
 
 float LibretroDroid::getAspectRatio() {
@@ -597,6 +708,9 @@ int16_t LibretroDroid::handleSetInputState(
     unsigned int index,
     unsigned int id
 ) {
+    if (netplay && netplay->isConnected()) {
+        return netplay->getInputState(port, device, id);
+    }
     if (input) {
         return input->getInputState(port, device, index, id);
     }

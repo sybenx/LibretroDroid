@@ -35,6 +35,9 @@ class GLRetroViewData(context: Context) {
 
     /** Memory to restore after loading, by libretro memory id (e.g. each game's SRAM in a subsystem). */
     var memoryStates: Map<Int, ByteArray> = mapOf()
+
+    /** Plays with another device over the network, starting once the game is loaded. */
+    var netplay: NetplayConfig? = null
     var shader: ShaderConfig = ShaderConfig.Default
     var viewportAlignment = ViewportAlignment.CENTER
     var rumbleEventsEnabled: Boolean = true
