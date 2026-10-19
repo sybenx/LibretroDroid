@@ -28,7 +28,8 @@ jobs:
       - name: Merge the latest upstream release
         id: merge
         run: |
-          upstream=$(gh api repos/Swordfish90/LibretroDroid/releases/latest --jq .tag_name)
+          # Upstream marks its newest releases as pre-releases, so take the highest version of any release.
+          upstream=$(gh api repos/Swordfish90/LibretroDroid/releases --paginate --jq '.[] | select(.draft | not) | .tag_name' | sort -V | tail -1)
           echo "Latest upstream release: ${upstream}"
           if git ls-remote --tags origin "refs/tags/${upstream}-sync.*" | grep -q .; then
             echo "Already following ${upstream}"
