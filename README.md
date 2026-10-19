@@ -39,3 +39,9 @@ dependencies {
     ...
 }
 ```
+
+## This fork
+
+`link-cable` adds what Lemuroid Sync's link cable needs: libretro subsystems (two games at once), any
+memory id (each Game Boy's save), an input port override and lockstep netplay between two devices.
+A daily workflow merges every new upstream release and tags it `<release>-sync.1` for JitPack.

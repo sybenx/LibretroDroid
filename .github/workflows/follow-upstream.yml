@@ -1,0 +1,87 @@
+name: Follow upstream releases
+
+# Merges each new Swordfish90/LibretroDroid release into link-cable (this fork's changes for Lemuroid
+# Sync), checks that it builds and tags it <release>-sync.1, which JitPack then builds for Lemuroid
+# Sync. A merge conflict opens an issue instead.
+on:
+  schedule:
+    - cron: "41 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: write
+  issues: write
+
+jobs:
+  follow:
+    name: Merge the latest upstream release
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: link-cable
+          fetch-depth: 0
+
+      - name: Merge the latest upstream release
+        id: merge
+        run: |
+          upstream=$(gh api repos/Swordfish90/LibretroDroid/releases/latest --jq .tag_name)
+          echo "Latest upstream release: ${upstream}"
+          if git ls-remote --tags origin "refs/tags/${upstream}-sync.*" | grep -q .; then
+            echo "Already following ${upstream}"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add upstream https://github.com/Swordfish90/LibretroDroid.git
+          git fetch --quiet upstream "refs/tags/${upstream}:refs/tags/${upstream}"
+          if ! git merge --no-edit "${upstream}"; then
+            files=$(git diff --name-only --diff-filter=U)
+            git merge --abort
+            title="Merging upstream LibretroDroid ${upstream} needs a hand"
+            if ! gh issue list --state open --search "\"${title}\" in:title" --json number --jq '.[].number' | grep -q .; then
+              gh issue create --title "${title}" --body "$(printf 'Merging %s into link-cable failed. Conflicting files:\n\n%s\n\nMerge it by hand, push link-cable and tag it %s-sync.1.' "${upstream}" "${files}" "${upstream}")"
+            fi
+            exit 1
+          fi
+          echo "upstream=${upstream}" >> "$GITHUB_OUTPUT"
+
+      - if: steps.merge.outputs.upstream != ''
+        run: git submodule update --init --recursive
+
+      - if: steps.merge.outputs.upstream != ''
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Build
+        if: steps.merge.outputs.upstream != ''
+        run: |
+          yes | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" "cmake;3.22.1" > /dev/null
+          ./gradlew :libretrodroid:assembleRelease --console=plain
+
+      - name: Publish
+        if: steps.merge.outputs.upstream != ''
+        run: |
+          tag="${{ steps.merge.outputs.upstream }}-sync.1"
+          git push origin link-cable
+          git tag "${tag}"
+          git push origin "${tag}"
+          # Ask JitPack to build it now rather than when Lemuroid Sync first needs it.
+          curl -s -m 1200 -o /dev/null -w "JitPack: %{http_code}\n" \
+            "https://jitpack.io/com/github/sybenx/LibretroDroid/${tag}/LibretroDroid-${tag}.pom" || true
+
+  keepalive:
+    name: Keep schedule alive
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    # GitHub pauses scheduled workflows after 60 days without commits. Re-enabling through the API
+    # resets that timer without dummy commits.
+    steps:
+      - run: gh api -X PUT "repos/${GITHUB_REPOSITORY}/actions/workflows/follow-upstream.yml/enable"
