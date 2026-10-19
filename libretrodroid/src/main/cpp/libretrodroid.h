@@ -73,6 +73,9 @@ public:
     std::pair<int8_t *, size_t> serializeSRAM();
     jboolean unserializeSRAM(int8_t *data, size_t size);
 
+    std::pair<int8_t *, size_t> serializeMemory(unsigned int memoryId);
+    bool unserializeMemory(unsigned int memoryId, int8_t *data, size_t size);
+
     void onSurfaceCreated();
     void onSurfaceChanged(unsigned int width, unsigned int height);
 
@@ -101,6 +104,9 @@ public:
     void loadGameFromPath(const std::string &gamePath);
     void loadGameFromBytes(const int8_t *data, size_t size);
     void loadGameFromVirtualFiles(std::vector<VFSFile> virtualFiles);
+    void loadGameSpecialFromBytes(unsigned int gameType, const std::vector<std::pair<int8_t*, size_t>>& games);
+
+    void resetInputs();
 
     void onKeyEvent(unsigned int port, int action, int keyCode);
     void onMotionEvent(unsigned int port, unsigned int source, float xAxis, float yAxis);

@@ -42,6 +42,8 @@ public:
     size_t (*retro_get_memory_size)(unsigned id);
     void* (*retro_get_memory_data)(unsigned id);
     bool (*retro_load_game)(const struct retro_game_info *game);
+    // Optional: only cores with subsystems (e.g. two linked Game Boys) export it.
+    bool (*retro_load_game_special)(unsigned game_type, const struct retro_game_info *info, size_t num_info) = nullptr;
     void (*retro_unload_game)(void);
     void (*retro_set_video_refresh)(retro_video_refresh_t);
     void (*retro_set_environment)(retro_environment_t);

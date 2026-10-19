@@ -97,6 +97,7 @@ public class LibretroDroid {
     public static native void loadGameFromPath(String gameFilePath);
     public static native void loadGameFromBytes(byte[] gameFileBytes);
     public static native void loadGameFromVirtualFiles(List<DetachedVirtualFile> virtualFiles);
+    public static native void loadGameSpecialFromBytes(int gameType, byte[][] gameFilesBytes);
     public static native void resume();
 
     public static native void onSurfaceCreated();
@@ -125,6 +126,9 @@ public class LibretroDroid {
     public static native byte[] serializeSRAM();
     public static native boolean unserializeSRAM(byte[] sram);
 
+    public static native byte[] serializeMemory(int memoryId);
+    public static native boolean unserializeMemory(int memoryId, byte[] memory);
+
     public static native void updateVariable(Variable variable);
     public static native Variable[] getVariables();
 
@@ -136,6 +140,7 @@ public class LibretroDroid {
     public static native void onTouchEvent(float xAxis, float yAxis);
 
     public static native void onKeyEvent(int port, int action, int keyCode);
+    public static native void resetInputs();
 
     public static native void refreshAspectRatio();
 

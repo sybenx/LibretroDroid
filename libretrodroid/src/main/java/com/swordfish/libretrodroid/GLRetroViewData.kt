@@ -24,10 +24,17 @@ class GLRetroViewData(context: Context) {
     var gameFilePath: String? = null
     var gameFileBytes: ByteArray? = null
     var gameVirtualFiles: List<VirtualFile> = listOf()
+
+    /** Loads [gameSpecialFilesBytes] as a libretro subsystem (retro_load_game_special) of this type. */
+    var gameSpecialType: Int? = null
+    var gameSpecialFilesBytes: List<ByteArray> = listOf()
     var systemDirectory: String = context.filesDir.absolutePath
     var savesDirectory: String = context.filesDir.absolutePath
     var variables: Array<Variable> = arrayOf()
     var saveRAMState: ByteArray? = null
+
+    /** Memory to restore after loading, by libretro memory id (e.g. each game's SRAM in a subsystem). */
+    var memoryStates: Map<Int, ByteArray> = mapOf()
     var shader: ShaderConfig = ShaderConfig.Default
     var viewportAlignment = ViewportAlignment.CENTER
     var rumbleEventsEnabled: Boolean = true

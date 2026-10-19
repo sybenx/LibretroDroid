@@ -282,6 +282,82 @@ JNIEXPORT jbyteArray JNICALL Java_com_swordfish_libretrodroid_LibretroDroid_seri
     return nullptr;
 }
 
+JNIEXPORT jboolean JNICALL Java_com_swordfish_libretrodroid_LibretroDroid_unserializeMemory(
+    JNIEnv* env,
+    jclass obj,
+    jint memoryId,
+    jbyteArray memory
+) {
+    try {
+        jboolean isCopy = JNI_FALSE;
+        jbyte* data = env->GetByteArrayElements(memory, &isCopy);
+        jsize size = env->GetArrayLength(memory);
+
+        bool result = LibretroDroid::getInstance().unserializeMemory(memoryId, data, size);
+
+        env->ReleaseByteArrayElements(memory, data, JNI_ABORT);
+
+        return result ? JNI_TRUE : JNI_FALSE;
+    } catch (std::exception &exception) {
+        LOGE("Error in unserializeMemory: %s", exception.what());
+        JavaUtils::throwRetroException(env, ERROR_SERIALIZATION);
+        return JNI_FALSE;
+    }
+}
+
+JNIEXPORT jbyteArray JNICALL Java_com_swordfish_libretrodroid_LibretroDroid_serializeMemory(
+    JNIEnv* env,
+    jclass obj,
+    jint memoryId
+) {
+    try {
+        auto [data, size] = LibretroDroid::getInstance().serializeMemory(memoryId);
+
+        jbyteArray result = env->NewByteArray(size);
+        env->SetByteArrayRegion(result, 0, size, (jbyte *) data);
+        delete[] data;
+
+        return result;
+
+    } catch (std::exception &exception) {
+        LOGE("Error in serializeMemory: %s", exception.what());
+        JavaUtils::throwRetroException(env, ERROR_SERIALIZATION);
+    }
+
+    return nullptr;
+}
+
+JNIEXPORT void JNICALL Java_com_swordfish_libretrodroid_LibretroDroid_loadGameSpecialFromBytes(
+    JNIEnv* env,
+    jclass obj,
+    jint gameType,
+    jobjectArray gameFilesBytes
+) {
+    try {
+        std::vector<std::pair<int8_t*, size_t>> games;
+        jsize count = env->GetArrayLength(gameFilesBytes);
+        for (jsize i = 0; i < count; i++) {
+            auto gameFileBytes = (jbyteArray) env->GetObjectArrayElement(gameFilesBytes, i);
+            size_t size = env->GetArrayLength(gameFileBytes);
+            auto* data = new int8_t[size];
+            env->GetByteArrayRegion(gameFileBytes, 0, size, reinterpret_cast<int8_t*>(data));
+            env->DeleteLocalRef(gameFileBytes);
+            games.emplace_back(data, size);
+        }
+        LibretroDroid::getInstance().loadGameSpecialFromBytes(gameType, games);
+    } catch (std::exception &exception) {
+        LOGE("Error in loadGameSpecialFromBytes: %s", exception.what());
+        JavaUtils::throwRetroException(env, ERROR_LOAD_GAME);
+    }
+}
+
+JNIEXPORT void JNICALL Java_com_swordfish_libretrodroid_LibretroDroid_resetInputs(
+    JNIEnv* env,
+    jclass obj
+) {
+    LibretroDroid::getInstance().resetInputs();
+}
+
 JNIEXPORT void JNICALL Java_com_swordfish_libretrodroid_LibretroDroid_reset(
     JNIEnv* env,
     jclass obj

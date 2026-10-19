@@ -71,6 +71,12 @@ class GLRetroView(
         LibretroDroid.setViewportAlignment(value.value)
     }
 
+    /** When set, input sent to any port is delivered to this port instead. */
+    var inputPortOverride: Int? by Delegates.observable<Int?>(null) { _, oldValue, newValue ->
+        // Release whatever the previous port was holding.
+        if (oldValue != newValue) queueEvent { LibretroDroid.resetInputs() }
+    }
+
     private val openGLESVersion: Int
 
     private var isGameLoaded = false
@@ -127,11 +133,13 @@ class GLRetroView(
     }
 
     fun sendKeyEvent(action: Int, keyCode: Int, port: Int = 0) {
-        queueEvent { LibretroDroid.onKeyEvent(port, action, keyCode) }
+        val targetPort = inputPortOverride ?: port
+        queueEvent { LibretroDroid.onKeyEvent(targetPort, action, keyCode) }
     }
 
     fun sendMotionEvent(source: Int, xAxis: Float, yAxis: Float, port: Int = 0) {
-        queueEvent { LibretroDroid.onMotionEvent(port, source, xAxis, yAxis) }
+        val targetPort = inputPortOverride ?: port
+        queueEvent { LibretroDroid.onMotionEvent(targetPort, source, xAxis, yAxis) }
     }
 
     override fun onTouchEvent(event: MotionEvent?): Boolean {
@@ -189,6 +197,18 @@ class GLRetroView(
     fun unserializeSRAM(data: ByteArray, useEmulationThread: Boolean = true): Boolean {
         return runOnEmulationThread(useEmulationThread) {
             LibretroDroid.unserializeSRAM(data)
+        }
+    }
+
+    fun serializeMemory(memoryId: Int, useEmulationThread: Boolean = true): ByteArray {
+        return runOnEmulationThread(useEmulationThread) {
+            LibretroDroid.serializeMemory(memoryId)
+        }
+    }
+
+    fun unserializeMemory(memoryId: Int, data: ByteArray, useEmulationThread: Boolean = true): Boolean {
+        return runOnEmulationThread(useEmulationThread) {
+            LibretroDroid.unserializeMemory(memoryId, data)
         }
     }
 
@@ -344,6 +364,10 @@ class GLRetroView(
     private fun initializeCore() = catchExceptions {
         if (isGameLoaded) return@catchExceptions
         when {
+            data.gameSpecialType != null -> LibretroDroid.loadGameSpecialFromBytes(
+                data.gameSpecialType!!,
+                data.gameSpecialFilesBytes.toTypedArray()
+            )
             data.gameFilePath != null -> loadGameFromPath(data.gameFilePath!!)
             data.gameFileBytes != null -> loadGameFromBytes(data.gameFileBytes!!)
             data.gameVirtualFiles.isNotEmpty() -> loadGameFromVirtualFiles(data.gameVirtualFiles)
@@ -352,6 +376,10 @@ class GLRetroView(
             LibretroDroid.unserializeSRAM(data.saveRAMState)
             data.saveRAMState = null
         }
+        data.memoryStates.forEach { (memoryId, state) ->
+            LibretroDroid.unserializeMemory(memoryId, state)
+        }
+        data.memoryStates = mapOf()
         LibretroDroid.onSurfaceCreated()
         isGameLoaded = true
 

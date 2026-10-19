@@ -151,32 +151,43 @@ bool LibretroDroid::unserializeState(int8_t *data, size_t size) {
 }
 
 JNIEXPORT jboolean JNICALL LibretroDroid::unserializeSRAM(int8_t* data, size_t size) {
+    return unserializeMemory(RETRO_MEMORY_SAVE_RAM, data, size);
+}
+
+std::pair<int8_t*, size_t> LibretroDroid::serializeSRAM() {
+    return serializeMemory(RETRO_MEMORY_SAVE_RAM);
+}
+
+bool LibretroDroid::unserializeMemory(unsigned int memoryId, int8_t* data, size_t size) {
     std::lock_guard<std::mutex> lock(coreLock);
 
-    size_t sramSize = core->retro_get_memory_size(RETRO_MEMORY_SAVE_RAM);
-    void *sramState = core->retro_get_memory_data(RETRO_MEMORY_SAVE_RAM);
+    size_t memorySize = core->retro_get_memory_size(memoryId);
+    void *memoryState = core->retro_get_memory_data(memoryId);
 
-    if (sramState == nullptr) {
-        LOGE("Cannot load SRAM: nullptr in retro_get_memory_data");
+    if (memoryState == nullptr) {
+        LOGE("Cannot load memory %u: nullptr in retro_get_memory_data", memoryId);
         return false;
     }
 
-    if (size > sramSize) {
-        LOGE("Cannot load SRAM: size mismatch");
+    if (size > memorySize) {
+        LOGE("Cannot load memory %u: size mismatch", memoryId);
         return false;
     }
 
-    memcpy(sramState, data, size);
+    memcpy(memoryState, data, size);
 
     return true;
 }
 
-std::pair<int8_t*, size_t> LibretroDroid::serializeSRAM() {
+std::pair<int8_t*, size_t> LibretroDroid::serializeMemory(unsigned int memoryId) {
     std::lock_guard<std::mutex> lock(coreLock);
 
-    size_t size = core->retro_get_memory_size(RETRO_MEMORY_SAVE_RAM);
+    void *memoryState = core->retro_get_memory_data(memoryId);
+    size_t size = memoryState != nullptr ? core->retro_get_memory_size(memoryId) : 0;
     auto* data = new int8_t[size];
-    memcpy(data, (int8_t*) core->retro_get_memory_data(RETRO_MEMORY_SAVE_RAM), size);
+    if (size > 0) {
+        memcpy(data, (int8_t*) memoryState, size);
+    }
 
     return std::pair(data, size);
 }
@@ -402,6 +413,41 @@ void LibretroDroid::loadGameFromVirtualFiles(std::vector<VFSFile> virtualFiles) 
     }
 
     afterGameLoad();
+}
+
+void LibretroDroid::loadGameSpecialFromBytes(
+    unsigned int gameType,
+    const std::vector<std::pair<int8_t*, size_t>>& games
+) {
+    LOGD("Performing libretrodroid loadGameSpecialFromBytes");
+
+    if (core->retro_load_game_special == nullptr) {
+        LOGE("Core does not support retro_load_game_special. Leaving.");
+        throw std::runtime_error("Core does not support retro_load_game_special");
+    }
+
+    // The core may keep pointers into this content, so the buffers are never freed (as in loadGameFromBytes).
+    std::vector<struct retro_game_info> gameInfos(games.size());
+    for (size_t i = 0; i < games.size(); i++) {
+        gameInfos[i].path = nullptr;
+        gameInfos[i].meta = nullptr;
+        gameInfos[i].data = games[i].first;
+        gameInfos[i].size = games[i].second;
+    }
+
+    bool result = core->retro_load_game_special(gameType, gameInfos.data(), gameInfos.size());
+    if (!result) {
+        LOGE("Cannot load game. Leaving.");
+        throw std::runtime_error("Cannot load game");
+    }
+
+    afterGameLoad();
+}
+
+void LibretroDroid::resetInputs() {
+    if (input) {
+        input = std::make_unique<Input>();
+    }
 }
 
 void LibretroDroid::destroy() {
